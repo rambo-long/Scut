@@ -49,7 +49,7 @@ namespace ZyGames.Framework.Game.Contract.Action
 		/// </summary>
 		/// <param name="actionId">Action identifier.</param>
 		/// <param name="httpGet">Http get.</param>
-        protected ReAccessTokenAction(short actionId, HttpGet httpGet)
+        protected ReAccessTokenAction(short actionId, ActionGetter httpGet)
             : base(actionId, httpGet)
         {
 
@@ -67,9 +67,9 @@ namespace ZyGames.Framework.Game.Contract.Action
 		/// <returns></returns>
         public override bool GetUrlElement()
         {
-            if (httpGet.GetString("RetailID", ref RetailID)
-                && httpGet.GetString("RefeshToken", ref RefeshToken)
-                && httpGet.GetString("Scope", ref Scope))
+            if (actionGetter.GetString("RetailID", ref RetailID)
+                && actionGetter.GetString("RefeshToken", ref RefeshToken)
+                && actionGetter.GetString("Scope", ref Scope))
             {
                 return true;
             }

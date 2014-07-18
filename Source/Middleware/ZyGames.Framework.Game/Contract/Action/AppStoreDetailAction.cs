@@ -42,7 +42,7 @@ namespace ZyGames.Framework.Game.Contract.Action
 		/// </summary>
 		/// <param name="aActionId">A action identifier.</param>
 		/// <param name="httpGet">Http get.</param>
-        public AppStoreDetailAction(short aActionId, HttpGet httpGet)
+        public AppStoreDetailAction(short aActionId, ActionGetter httpGet)
             : base(aActionId, httpGet)
         {
         }
@@ -67,7 +67,7 @@ namespace ZyGames.Framework.Game.Contract.Action
 		/// <returns></returns>
         public override bool GetUrlElement()
         {
-            if (httpGet.GetEnum("MobileType", ref MobileType))
+            if (actionGetter.GetEnum("MobileType", ref MobileType))
             {
                 return true;
             }

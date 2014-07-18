@@ -36,6 +36,7 @@ using ZyGames.Framework.Common.Log;
 using ZyGames.Framework.Common.Timing;
 using ZyGames.Framework.Data;
 using ZyGames.Framework.Event;
+using ZyGames.Framework.Redis;
 
 namespace ZyGames.Framework.Model
 {
@@ -53,9 +54,18 @@ namespace ZyGames.Framework.Model
         /// </summary>
         private static int LogPriorBuildMonth = ConfigUtils.GetSetting("Log.PriorBuild.Month", 3);
 
-        private static readonly DictionaryExtend<string, SchemaTable> SchemaSet = new DictionaryExtend<string, SchemaTable>();
+        private static DictionaryExtend<string, SchemaTable> SchemaSet = new DictionaryExtend<string, SchemaTable>();
         private static ConcurrentQueue<string> _logTables = new ConcurrentQueue<string>();
         private static CacheListener _tableListener = new CacheListener("__EntitySchemaSet_CheckLogTable", 24 * 60 * 60, OnCheckLogTable);//间隔1天
+        private static Assembly _entityAssembly;
+
+        /// <summary>
+        /// 聊天缓存生命周期
+        /// </summary>
+        public static Assembly EntityAssembly
+        {
+            get { return _entityAssembly; }
+        }
 
         /// <summary>
         /// 全局缓存生命周期
@@ -121,6 +131,14 @@ namespace ZyGames.Framework.Model
         }
 
         /// <summary>
+        /// 
+        /// </summary>
+        public static void Init()
+        {
+            SchemaSet = new DictionaryExtend<string, SchemaTable>();
+        }
+
+        /// <summary>
         /// 生成存储在Redis的Key
         /// </summary>
         /// <returns></returns>
@@ -139,9 +157,9 @@ namespace ZyGames.Framework.Model
         {
             if (string.IsNullOrEmpty(personalKey))
             {
-                return string.Format("{0}", type.FullName);
+                return string.Format("{0}", RedisConnectionPool.ConvertKeyFromType(type.FullName));
             }
-            return string.Format("{0}_{1}", type.FullName, personalKey);
+            return string.Format("{0}_{1}", RedisConnectionPool.ConvertKeyFromType(type.FullName), personalKey);
         }
 
         /// <summary>
@@ -150,11 +168,15 @@ namespace ZyGames.Framework.Model
         /// <param name="assembly"></param>
         public static void LoadAssembly(Assembly assembly)
         {
+            Console.WriteLine("{0} Start checking table schema, please wait.", DateTime.Now.ToString("HH:mm:ss"));
+
+            _entityAssembly = assembly;
             var types = assembly.GetTypes().Where(p => p.GetCustomAttributes(typeof(EntityTableAttribute), false).Count() > 0).ToList();
             foreach (var type in types)
             {
                 InitSchema(type);
             }
+            Console.WriteLine("{0} Check table schema successfully.", DateTime.Now.ToString("HH:mm:ss"));
         }
 
         /// <summary>
@@ -163,10 +185,9 @@ namespace ZyGames.Framework.Model
         /// <param name="type"></param>
         public static void InitSchema(Type type)
         {
+            SchemaTable schema = new SchemaTable();
             try
             {
-
-                SchemaTable schema = new SchemaTable();
                 schema.IsEntitySync = type.GetCustomAttributes(typeof(EntitySyncAttribute), false).Length > 0;
                 schema.EntityType = type;
                 //加载表
@@ -211,6 +232,15 @@ namespace ZyGames.Framework.Model
             catch (Exception ex)
             {
                 TraceLog.WriteError("InitSchema type:{0} error:\r\n{1}", type.FullName, ex);
+            }
+            //check cachetype
+            if ((schema.CacheType == CacheType.Entity && !type.IsSubclassOf(typeof(ShareEntity))) ||
+                (schema.CacheType == CacheType.Dictionary &&
+                    schema.AccessLevel == AccessLevel.ReadWrite &&
+                    !type.IsSubclassOf(typeof(BaseEntity)))
+                )
+            {
+                throw new ArgumentException(string.Format("\"EntityTable.CacheType:{1}\" attribute of {0} class is error", type.FullName, schema.CacheType), "CacheType");
             }
         }
 
@@ -605,7 +635,17 @@ namespace ZyGames.Framework.Model
             SchemaTable schema;
             return TryGet(type, out schema);
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="typeName"></param>
+        /// <returns></returns>
+        public static SchemaTable Get(string typeName)
+        {
+            SchemaTable schema;
+            TryGet(typeName, out schema);
+            return schema;
+        }
         /// <summary>
         /// Get entity schema.
         /// </summary>
@@ -613,9 +653,7 @@ namespace ZyGames.Framework.Model
         /// <returns></returns>
         public static SchemaTable Get<T>()
         {
-            SchemaTable schema;
-            SchemaSet.TryGetValue(typeof(T).FullName, out schema);
-            return schema;
+            return Get(typeof(T).FullName);
         }
 
         /// <summary>
@@ -626,7 +664,7 @@ namespace ZyGames.Framework.Model
         /// <returns></returns>
         public static bool TryGet<T>(out SchemaTable schema)
         {
-            return SchemaSet.TryGetValue(typeof(T).FullName, out schema);
+            return TryGet(typeof(T).FullName, out schema);
         }
 
         /// <summary>
@@ -641,7 +679,18 @@ namespace ZyGames.Framework.Model
             {
                 throw new ArgumentNullException("type");
             }
-            return SchemaSet.TryGetValue(type.FullName, out schema);
+            return TryGet(type.FullName, out schema);
+        }
+
+        /// <summary>
+        /// Get schema for typename
+        /// </summary>
+        /// <param name="typeName"></param>
+        /// <param name="schema"></param>
+        /// <returns></returns>
+        public static bool TryGet(string typeName, out SchemaTable schema)
+        {
+            return SchemaSet.TryGetValue(typeName, out schema);
         }
 
         private static T FindAttribute<T>(object[] attrList) where T : Attribute, new()

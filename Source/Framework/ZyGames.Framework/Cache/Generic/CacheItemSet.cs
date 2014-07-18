@@ -105,6 +105,11 @@ namespace ZyGames.Framework.Cache.Generic
         }
 
         /// <summary>
+        /// 是否集合
+        /// </summary>
+        public bool HasCollection { get; internal set; }
+
+        /// <summary>
         /// 是否为空
         /// </summary>
         public bool IsEmpty
@@ -156,7 +161,7 @@ namespace ZyGames.Framework.Cache.Generic
                 return;
             }
             _hasChanged = true;
-            PutToChangeKeys(sender);
+            PutToChangeKeys(sender as AbstractEntity);
             DoChangedNotify(sender as AbstractEntity, eventArgs);
         }
 
@@ -168,7 +173,7 @@ namespace ZyGames.Framework.Cache.Generic
         protected override void NotifyByChildren(object sender, CacheItemEventArgs eventArgs)
         {
             _hasChanged = true;
-            PutToChangeKeys(sender);
+            PutToChangeKeys(sender as AbstractEntity);
             DoChangedNotify(sender as AbstractEntity, eventArgs);
         }
 
@@ -185,9 +190,9 @@ namespace ZyGames.Framework.Cache.Generic
             _hasChanged = false;
         }
 
-        private void PutToChangeKeys(object sender)
+        private void PutToChangeKeys(AbstractEntity entity)
         {
-            CacheChangeManager.Current.SetEntity(sender as AbstractEntity);
+            DataSyncQueueManager.Send(new[] { entity });
         }
 
         /// <summary>
@@ -234,6 +239,7 @@ namespace ZyGames.Framework.Cache.Generic
                 return _period != null && _period.IsPeriod;
             }
         }
+
 
         /// <summary>
         /// 加载成功

@@ -45,25 +45,43 @@ namespace ZyGames.Framework.Common.Event
         private event CustomEventHandle<T> EventHandle;
 
         /// <summary>
+        /// 父类对象引用
+        /// </summary>
+        public object Parent { get; set; }
+
+        /// <summary>
+        /// Reset event
+        /// </summary>
+        public void Reset()
+        {
+            Parent = null;
+            EventHandle = null;
+        }
+
+        /// <summary>
         /// 注册单一事件
         /// </summary>
         /// <param name="handle"></param>
-        public void AddSingle(CustomEventHandle<T> handle)
+        /// <param name="target"></param>
+        public void AddSingle(CustomEventHandle<T> handle, object target)
         {
             if (EventHandle != null)
             {
                 EventHandle -= handle;
             }
             EventHandle += handle;
+            Parent = target;
         }
 
         /// <summary>
         /// 增加事件
         /// </summary>
         /// <param name="handle"></param>
-        public void Add(CustomEventHandle<T> handle)
+        /// <param name="target"></param>
+        public void Add(CustomEventHandle<T> handle, object target)
         {
             EventHandle += handle;
+            Parent = target;
         }
         /// <summary>
         /// 移除事件
@@ -72,6 +90,7 @@ namespace ZyGames.Framework.Common.Event
         public void Remove(CustomEventHandle<T> handle)
         {
             EventHandle -= handle;
+            Parent = null;
         }
         /// <summary>
         /// 事件通知
@@ -82,7 +101,22 @@ namespace ZyGames.Framework.Common.Event
         {
             if (EventHandle != null)
             {
-                EventHandle(sender, args);
+                try
+                {
+                    EventHandle.BeginInvoke(sender, args, null, null);
+                }
+                catch (Exception ex)
+                {
+                    string error = "\r\n";
+                    Delegate[] tempList = EventHandle.GetInvocationList();
+                    int index = 0;
+                    foreach (dynamic handle in tempList)
+                    {
+                        error += string.Format("Method:{0}\r\n Target[{1}]:{2},{3}\r\n", handle.Method, index, handle.Target, handle.Target.GetType().Assembly.FullName);
+                        index++;
+                    }
+                    throw new Exception(error, ex);
+                }
             }
         }
         /// <summary>
@@ -96,12 +130,12 @@ namespace ZyGames.Framework.Common.Event
             {
                 return;
             }
-            var tempList = EventHandle.GetInvocationList();
-            foreach (var item in tempList)
+            Delegate[] tempList = EventHandle.GetInvocationList();
+            foreach (dynamic handle in tempList)
             {
-                if (item != null)
+                if (handle != null)
                 {
-                    item.DynamicInvoke(sender, args);
+                    handle.BeginInvoke(sender, args, null, null);
                 }
             }
         }

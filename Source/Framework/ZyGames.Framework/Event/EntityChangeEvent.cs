@@ -36,7 +36,8 @@ namespace ZyGames.Framework.Event
     public class EntityChangeEvent : IItemChangeEvent
     {
         private bool _isDisableEvent;
-        private int _lockFlag;
+        private readonly object _lockFlag = new object();
+        private int _modified;
 
         /// <summary>
         /// 
@@ -123,6 +124,16 @@ namespace ZyGames.Framework.Event
         {
             get { return _childrenEvent; }
         }
+
+        /// <summary>
+        /// 正在被修改中
+        /// </summary>
+        [JsonIgnore]
+        public bool IsModifying
+        {
+            get { return _modified == 1; }
+        }
+
         /// <summary>
         /// 
         /// </summary>
@@ -153,11 +164,31 @@ namespace ZyGames.Framework.Event
             if (!_isDisableEvent && ChildrenEvent != null && changeEvent is IItemChangeEvent)
             {
                 var child = (IItemChangeEvent)changeEvent;
-                ChildrenEvent.AddSingleItemEvent(child.UnChangeNotify);
+                //注册多个子类的事件
+                ChildrenEvent.AddSingleItemEvent(child.UnChangeNotify, null);
                 var e = child.ItemEvent;
                 if (e != null)
                 {
-                    e.AddSingleItemEvent(NotifyByChildren);
+                    //注册父亲类单一事件
+                    e.AddSingleItemEvent(NotifyByChildren, this);
+
+                }
+            }
+        }
+
+        internal void CheckSingleBindEvent(object changeEvent)
+        {
+            if (!_isDisableEvent && ChildrenEvent != null && changeEvent is IItemChangeEvent)
+            {
+                var child = (IItemChangeEvent)changeEvent;
+                if (child.ItemEvent != null && child.ItemEvent.Parent != null)
+                {
+                    var parent = child.ItemEvent.Parent as IItemChangeEvent;
+                    throw new Exception(string.Format("The \"{0}\" has been the other {1} object binding cannot be added",
+                        changeEvent.GetType().FullName,
+                        parent != null && parent.ItemEvent != null && parent.ItemEvent.Parent != null
+                        ? parent.ItemEvent.Parent.GetType().FullName
+                        : parent != null ? parent.PropertyName : ""));
                 }
             }
         }
@@ -207,8 +238,14 @@ namespace ZyGames.Framework.Event
         {
             if (updateHandle != null)
             {
-                if (updateHandle(this))
+                try
                 {
+                    Interlocked.Exchange(ref _modified, 1);
+                    updateHandle(this);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _modified, 0);
                     Notify(this, CacheItemChangeType.Modify, PropertyName);
                 }
             }
@@ -218,23 +255,50 @@ namespace ZyGames.Framework.Event
         /// Get exclusive modify entity property.
         /// </summary>
         /// <param name="modifyHandle"></param>
+        [Obsolete("Use ModifyLocked method", true)]
         public override void ExclusiveModify(Action modifyHandle)
         {
-            if (modifyHandle != null)
+            ModifyLocked(modifyHandle);
+        }
+
+        /// <summary>
+        /// locked modify value.
+        /// </summary>
+        /// <param name="action"></param>
+        public override void ModifyLocked(Action action)
+        {
+            if (action != null)
             {
                 try
                 {
                     EnterLock();
-                    modifyHandle();
-                    Notify(this, CacheItemChangeType.Modify, PropertyName);
+                    DelayNotify();
+                    action();
                 }
                 finally
                 {
+                    TriggerNotify();
                     ExitLock();
                 }
             }
         }
 
+        /// <summary>
+        /// 推迟数据改变通知
+        /// </summary>
+        public void DelayNotify()
+        {
+            Interlocked.Exchange(ref _modified, 1);
+        }
+
+        /// <summary>
+        /// 触发通知
+        /// </summary>
+        public void TriggerNotify()
+        {
+            Interlocked.Exchange(ref _modified, 0);
+            Notify(this, CacheItemChangeType.Modify, PropertyName);
+        }
 
         /// <summary>
         /// 触发修改通知事件
@@ -278,7 +342,8 @@ namespace ZyGames.Framework.Event
         /// <param name="eventArgs"></param>
         protected virtual void Notify(object sender, CacheItemEventArgs eventArgs)
         {
-            if (!_isDisableEvent)
+            //modify reason:调用ExclusiveModify方法多个属性被修改时,修改状态延后通知，减少频繁同步数据
+            if (!_isDisableEvent && !IsModifying)
             {
                 _hasChanged = true;
                 if (ItemEvent != null)
@@ -316,7 +381,6 @@ namespace ZyGames.Framework.Event
         {
             if (disposing)
             {
-                Interlocked.Exchange(ref _lockFlag, 0);
                 //释放 托管资源 
                 _itemEvent = null;
                 _childrenEvent = null;
@@ -329,13 +393,7 @@ namespace ZyGames.Framework.Event
         /// </summary>
         public void EnterLock()
         {
-            while (true)
-            {
-                if (Interlocked.CompareExchange(ref _lockFlag, 1, 0) == 0)
-                {
-                    break;
-                }
-            }
+            Monitor.Enter(_lockFlag);
         }
 
         /// <summary>
@@ -343,7 +401,7 @@ namespace ZyGames.Framework.Event
         /// </summary>
         public void ExitLock()
         {
-            Interlocked.Exchange(ref _lockFlag, 0);
+            Monitor.Exit(_lockFlag);
         }
         /// <summary>
         /// To json string.

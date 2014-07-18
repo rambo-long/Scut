@@ -88,6 +88,17 @@ namespace ContractTools.WebApp
                 return Convert.ToInt32(Request.Params["slnID"]);
             }
         }
+        protected int VerID
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Request["VerID"]))
+                {
+                    return 0;
+                }
+                return Convert.ToInt32(Request["VerID"]);
+            }
+        }
         protected int ContractID
         {
             get
@@ -105,7 +116,7 @@ namespace ContractTools.WebApp
         private void BindContract()
         {
             ddlContract.Items.Clear();
-            var list = DbDataLoader.GetContract(SlnID);
+            var list = DbDataLoader.GetContract(SlnID, VerID);
             if (list.Count > 0)
             {
                 ddlContract.DataSource = list;
@@ -146,14 +157,15 @@ namespace ContractTools.WebApp
                 string[] contractList = txtMoreContrats.Text.Trim().Split(',');
                 int gameId = lbtGmeID.Text.ToInt();
                 int serverId = txtServerID.Text.ToInt();
+                int versionId = VerID;
 
                 foreach (var tempId in contractList)
                 {
                     int conId = tempId.Trim().ToInt();
                     if (conId == 0) continue;
 
-                    requestParams = GetRequestParams(sid, uid, conId, SlnID, pid, pwd, gameId, serverId);
-                    responseStr += PostGameServer(conId, SlnID, serverUrl, requestParams, isSocket, out respSID, out respUID);
+                    requestParams = GetRequestParams(sid, uid, conId, SlnID, VerID, pid, pwd, gameId, serverId);
+                    responseStr += PostGameServer(conId, SlnID, versionId, serverUrl, requestParams, isSocket, pid, out respSID, out respUID);
                     if (!string.IsNullOrEmpty(respSID))
                     {
                         txtSessionID.Text = respSID;
@@ -162,15 +174,15 @@ namespace ContractTools.WebApp
                         uid = respUID;
                     }
                 }
-                requestParams = GetRequestParams(sid, uid, contractId, SlnID, pid, pwd, gameId, serverId, ParamListTextBox.Text);
+                requestParams = GetRequestParams(sid, uid, contractId, SlnID,VerID, pid, pwd, gameId, serverId, ParamListTextBox.Text);
                 LinkUrlLiteral.Text = requestParams;
                 if (this.ckResponse.Checked)
                 {
-                    responseStr += PostGameServer(contractId, SlnID, serverUrl, requestParams, isSocket, out respSID, out respUID);
+                    responseStr += PostGameServer(contractId, SlnID, versionId, serverUrl, requestParams, isSocket, pid, out respSID, out respUID);
                 }
                 else
                 {
-                    responseStr = PostGameServer(contractId, SlnID, serverUrl, requestParams, isSocket, out respSID, out respUID);
+                    responseStr = PostGameServer(contractId, SlnID, versionId, serverUrl, requestParams, isSocket, pid, out respSID, out respUID);
                 }
                 if (!string.IsNullOrEmpty(respSID))
                 {
@@ -185,7 +197,7 @@ namespace ContractTools.WebApp
             }
         }
 
-        private static string GetRequestParams(string sid, string uid, int contractId, int slnId, string pid, string pwd, int gameId, int serverId, string paramList = "")
+        private static string GetRequestParams(string sid, string uid, int contractId, int slnId, int versionId, string pid, string pwd, int gameId, int serverId, string paramList = "")
         {
             string[] paramArray = null;
             if (paramList != null)
@@ -204,7 +216,7 @@ namespace ContractTools.WebApp
                 requestParams.AppendFormat("&ServerID={0}", serverId);
             }
             int paramType = 1;
-            var paramRecords = DbDataLoader.GetParamInfo(slnId, contractId, paramType);
+            var paramRecords = DbDataLoader.GetParamInfo(slnId, contractId, paramType, versionId);
 
             int i = 0;
             foreach (var record in paramRecords)
@@ -246,44 +258,41 @@ namespace ContractTools.WebApp
             return requestParams.ToString();
         }
 
-        private static List<ParamInfoModel> GetResponseFields(int contractId, int slnId)
+        private static List<ParamInfoModel> GetResponseFields(int contractId, int slnId, int versionId)
         {
             int paramType = 2;
-            return DbDataLoader.GetParamInfo(slnId, contractId, paramType);
+            return DbDataLoader.GetParamInfo(slnId, contractId, paramType, versionId);
         }
 
 
-        private static string PostGameServer(int contractId, int slnId, string serverUrl, string requestParams, bool isSocket, out string sid, out string uid)
+        private static string PostGameServer(int contractId, int slnId, int versionId, string serverUrl, string requestParams, bool isSocket, string pid, out string sid, out string uid)
         {
             sid = "";
             uid = "";
             StringBuilder respContent = new StringBuilder();
             MessageHead msg = new MessageHead();
-            MessageStructure msgReader = NetHelper.Create(serverUrl, requestParams, out msg, isSocket);
+            MessageStructure msgReader = NetHelper.Create(serverUrl, requestParams, out msg, isSocket, contractId, pid);
             if (msgReader != null)
             {
-                ProcessResult(contractId, slnId, respContent, msg, msgReader, out sid, out uid);
+                ProcessResult(contractId, slnId, versionId, respContent, msg, msgReader, out sid, out uid);
+            }
+            else
+            {
+                ResponseHead(contractId, respContent, ErrorCode, "请求超时");
             }
             return respContent.ToString();
         }
 
-        private static void ProcessResult(int contractId, int slnId, StringBuilder respContent, MessageHead msg, MessageStructure msgReader, out string sid, out string uid)
+        private static void ProcessResult(int contractId, int slnId, int versionId, StringBuilder respContent, MessageHead msg, MessageStructure msgReader, out string sid, out string uid)
         {
             sid = "";
             uid = "";
-            //头部消息
-            respContent.AppendFormat("<h3>{0}-{1}</h3>", contractId, "基本消息");
-            respContent.Append("<table style=\"width:90%; border-color:#999\" border=\"1\" cellpadding=\"3\" cellspacing=\"0\">");
-            respContent.Append("<tr><td style=\"width:25%;\"><strong>状态值</strong></td>");
-            respContent.Append("<td style=\"width:75%;\"><strong>描述</strong></td></tr>");
-            respContent.AppendFormat("<tr><td>{0}</td>", msg.ErrorCode);
-            respContent.AppendFormat("<td>{0}&nbsp;</td></tr>", msg.ErrorInfo);
-            respContent.Append("</table>");
+            ResponseHead(contractId, respContent, msg.ErrorCode, msg.ErrorInfo);
 
 
             if (msg.ErrorCode != ErrorCode)
             {
-                var respRecords = GetResponseFields(contractId, slnId);
+                var respRecords = GetResponseFields(contractId, slnId, versionId);
 
                 //消息体
                 respContent.AppendFormat("<h3>{0}-{1}</h3>", contractId, "返回结果");
@@ -354,6 +363,18 @@ namespace ContractTools.WebApp
                 respContent.Append("</table>");
 
             }
+        }
+
+        private static void ResponseHead(int contractId, StringBuilder respContent, int errorCode, string errorInfo)
+        {
+            //头部消息
+            respContent.AppendFormat("<h3>{0}-{1}</h3>", contractId, "基本消息");
+            respContent.Append("<table style=\"width:90%; border-color:#999\" border=\"1\" cellpadding=\"3\" cellspacing=\"0\">");
+            respContent.Append("<tr><td style=\"width:25%;\"><strong>状态值</strong></td>");
+            respContent.Append("<td style=\"width:75%;\"><strong>描述</strong></td></tr>");
+            respContent.AppendFormat("<tr><td>{0}</td>", errorCode);
+            respContent.AppendFormat("<td>{0}&nbsp;</td></tr>", errorInfo);
+            respContent.Append("</table>");
         }
 
         /// <summary>
@@ -437,7 +458,7 @@ namespace ContractTools.WebApp
                                     if (i == 0)
                                         headContent.AppendFormat("<td align=\"center\"><strong>{0}</strong>({1})</td>",
                                                                  fieldName, fieldType);
-                                    builderContent.AppendFormat("<td align=\"center\">&nbsp;{0}</td>", fieldValue);
+                                    builderContent.AppendFormat("<td align=\"center\">&nbsp;{0}</td>", (fieldValue ?? "").Replace("{", "%7B").Replace("}", "%7D"));
                                     columnNum++;
                                 }
                                 if (fieldType == FieldType.Record)
@@ -472,6 +493,7 @@ namespace ContractTools.WebApp
                 catch (Exception ex)
                 {
                     builderContent.AppendFormat("<tr><td align=\"left\">{0}行出错{1}</td></tr>", (i + 1), ex.Message);
+                    break; //读流出错，直接退出
                 }
             }
 

@@ -280,6 +280,22 @@ namespace ZyGames.Framework.Cache.Generic
         }
 
         /// <summary>
+        /// 从Redis加载所有缓存
+        /// </summary>
+        /// <param name="match"></param>
+        public void LoadFrom(Predicate<T> match)
+        {
+            string redisKey = CreateRedisKey();
+            TransReceiveParam receiveParam = new TransReceiveParam(redisKey);
+            receiveParam.Schema = SchemaTable();
+            int maxCount = receiveParam.Schema.Capacity;
+            var filter = new DbDataFilter(maxCount);
+            receiveParam.DbFilter = filter;
+            receiveParam.Capacity = maxCount;
+            LoadFrom(receiveParam, match);
+        }
+
+        /// <summary>
         /// 增加
         /// </summary>
         /// <param name="t"></param>
@@ -344,8 +360,11 @@ namespace ZyGames.Framework.Cache.Generic
             if (provider != null)
             {
                 var filter = new DbDataFilter(maxCount);
-                filter.Condition = provider.FormatFilterParam(paramName);
-                filter.Parameters.Add(paramName, personalId);
+                if (!string.IsNullOrEmpty(personalId))
+                {
+                    filter.Condition = provider.FormatFilterParam(paramName);
+                    filter.Parameters.Add(paramName, personalId);
+                }
                 receiveParam.DbFilter = filter;
             }
             receiveParam.Capacity = maxCount;
@@ -384,10 +403,8 @@ namespace ZyGames.Framework.Cache.Generic
             return TryRemove(personalId, key, entity =>
             {
                 entity.OnDelete();
-                var groupList = new GroupList<string, T>();
-                groupList.TryAdd(personalId, entity);
                 TransSendParam sendParam = new TransSendParam() { IsChange = true };
-                DoSend(groupList, sendParam);
+                DoSend(new[] { new KeyValuePair<string, T>(personalId, value) }, sendParam);
                 return true;
             });
         }

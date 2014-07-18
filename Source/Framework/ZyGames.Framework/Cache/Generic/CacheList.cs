@@ -24,8 +24,10 @@ THE SOFTWARE.
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using ProtoBuf;
 using ZyGames.Framework.Common;
+using ZyGames.Framework.Common.Locking;
 using ZyGames.Framework.Event;
 
 namespace ZyGames.Framework.Cache.Generic
@@ -37,6 +39,7 @@ namespace ZyGames.Framework.Cache.Generic
     [ProtoContract, Serializable]
     public class CacheList<T> : EntityChangeEvent, IDataExpired, IList<T>
     {
+        private readonly object _syncRoot = new object();
         private List<T> _list;
 
         /// <summary>
@@ -76,7 +79,12 @@ namespace ZyGames.Framework.Cache.Generic
         {
             ExpiredHandle = expiredHandle;
             _list = length > 0 ? new List<T>(length) : new List<T>();
+        }
 
+        public override void AddChildrenListener(object changeEvent)
+        {
+            CheckSingleBindEvent(changeEvent);
+            base.AddChildrenListener(changeEvent);
         }
 
         /// <summary>
@@ -101,11 +109,15 @@ namespace ZyGames.Framework.Cache.Generic
         {
             get
             {
-                return index < _list.Count ? _list[index] : default(T);
+                lock (_syncRoot)
+                {
+                    return index < _list.Count ? _list[index] : default(T);
+                }
             }
             set
             {
-                lock (_list)
+                AddChildrenListener(value);
+                lock (_syncRoot)
                 {
                     if (index < _list.Count)
                     {
@@ -116,9 +128,8 @@ namespace ZyGames.Framework.Cache.Generic
                     {
                         _list.Add(value);
                     }
-                    AddChildrenListener(value);
-                    Notify(value, CacheItemChangeType.Modify, PropertyName);
                 }
+                Notify(value, CacheItemChangeType.Modify, PropertyName);
             }
         }
         /// <summary>
@@ -127,7 +138,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public IEnumerator<T> GetEnumerator()
         {
-            return _list.GetEnumerator();
+            lock (_syncRoot)
+            {
+                return _list.ToList().GetEnumerator();
+            }
         }
 
         IEnumerator IEnumerable.GetEnumerator()
@@ -141,12 +155,12 @@ namespace ZyGames.Framework.Cache.Generic
         /// <param name="item"></param>
         public void Add(T item)
         {
-            lock (_list)
+            AddChildrenListener(item);
+            lock (_syncRoot)
             {
                 _list.Add(item);
-                AddChildrenListener(item);
-                Notify(item, CacheItemChangeType.Add, PropertyName);
             }
+            Notify(item, CacheItemChangeType.Add, PropertyName);
         }
 
         /// <summary>
@@ -156,17 +170,21 @@ namespace ZyGames.Framework.Cache.Generic
         /// <param name="math"></param>
         public bool TryAdd(T item, Predicate<T> math)
         {
-            lock (_list)
+            bool result = false;
+            lock (_syncRoot)
             {
                 if (math(item))
                 {
-                    _list.Add(item);
                     AddChildrenListener(item);
-                    Notify(item, CacheItemChangeType.Add, PropertyName);
-                    return true;
+                    _list.Add(item);
+                    result = true;
                 }
             }
-            return false;
+            if (result)
+            {
+                Notify(item, CacheItemChangeType.Add, PropertyName);
+            }
+            return result;
         }
 
         /// <summary>
@@ -174,12 +192,12 @@ namespace ZyGames.Framework.Cache.Generic
         /// </summary>
         public void Clear()
         {
-            lock (_list)
+            lock (_syncRoot)
             {
                 _list.Clear();
-                Notify(this, CacheItemChangeType.Clear, PropertyName);
-                ClearChildrenEvent();
             }
+            Notify(this, CacheItemChangeType.Clear, PropertyName);
+            ClearChildrenEvent();
         }
 
         /// <summary>
@@ -189,7 +207,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public bool Contains(T item)
         {
-            return _list.Contains(item);
+            lock (_syncRoot)
+            {
+                return _list.Contains(item);
+            }
         }
 
         /// <summary>
@@ -208,7 +229,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public T[] ToArray()
         {
-            return _list.ToArray();
+            lock (_syncRoot)
+            {
+                return _list.ToArray();
+            }
         }
 
         /// <summary>
@@ -217,13 +241,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public List<T> ToList()
         {
-            var list = new List<T>();
-            var e = GetEnumerator();
-            while (e.MoveNext())
+            lock (_syncRoot)
             {
-                list.Add(e.Current);
+                return _list.ToList();
             }
-            return list;
         }
 
         /// <summary>
@@ -231,10 +252,14 @@ namespace ZyGames.Framework.Cache.Generic
         /// </summary>
         public void Foreach(Func<T, bool> pre)
         {
-            var e = GetEnumerator();
-            while (e.MoveNext())
+            List<T> list = null;
+            lock (_syncRoot)
             {
-                if (!pre(e.Current))
+                list = _list.ToList();
+            }
+            foreach (var item in list)
+            {
+                if (!pre(item))
                 {
                     break;
                 }
@@ -247,16 +272,20 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public bool Remove(T item)
         {
-            lock (_list)
+            bool result = false;
+            lock (_syncRoot)
             {
                 if (_list.Remove(item))
                 {
-                    Notify(item, CacheItemChangeType.Remove, PropertyName);
-                    RemoveChildrenListener(item);
-                    return true;
+                    result = true;
                 }
-                return false;
             }
+            if (result)
+            {
+                Notify(item, CacheItemChangeType.Remove, PropertyName);
+                RemoveChildrenListener(item);
+            }
+            return result;
         }
         /// <summary>
         /// 
@@ -265,7 +294,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public int IndexOf(T item)
         {
-            return _list.IndexOf(item);
+            lock (_syncRoot)
+            {
+                return _list.IndexOf(item);
+            }
         }
         /// <summary>
         /// 
@@ -274,12 +306,12 @@ namespace ZyGames.Framework.Cache.Generic
         /// <param name="item"></param>
         public void Insert(int index, T item)
         {
-            lock (_list)
+            AddChildrenListener(item);
+            lock (_syncRoot)
             {
                 _list.Insert(index, item);
-                AddChildrenListener(item);
-                Notify(item, CacheItemChangeType.Remove, PropertyName);
             }
+            Notify(item, CacheItemChangeType.Remove, PropertyName);
         }
 
         /// <summary>
@@ -289,14 +321,15 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public bool RemoveAt(int index)
         {
-            lock (_list)
+            T t;
+            lock (_syncRoot)
             {
-                var temp = _list[index];
+                t = _list[index];
                 _list.RemoveAt(index);
-                Notify(temp, CacheItemChangeType.Remove, PropertyName);
-                RemoveChildrenListener(temp);
-                return true;
             }
+            Notify(t, CacheItemChangeType.Remove, PropertyName);
+            RemoveChildrenListener(t);
+            return true;
         }
         /// <summary>
         /// 
@@ -305,10 +338,16 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public int RemoveAll(Predicate<T> match)
         {
-            lock (_list)
+            List<T> list = null;
+            lock (_syncRoot)
             {
-                var tempList = _list.FindAll(match);
-                int count = 0;
+                list = _list.ToList();
+            }
+
+            var tempList = list.FindAll(match);
+            int count = 0;
+            lock (_syncRoot)
+            {
                 foreach (var item in tempList)
                 {
                     if (_list.Remove(item))
@@ -317,12 +356,12 @@ namespace ZyGames.Framework.Cache.Generic
                         RemoveChildrenListener(item);
                     }
                 }
-                if (count > 0)
-                {
-                    Notify(this, CacheItemChangeType.RemoveAll, PropertyName);
-                }
-                return count;
             }
+            if (count > 0)
+            {
+                Notify(this, CacheItemChangeType.RemoveAll, PropertyName);
+            }
+            return count;
         }
 
         /// <summary>
@@ -330,7 +369,13 @@ namespace ZyGames.Framework.Cache.Generic
         /// </summary>
         public int Count
         {
-            get { return _list.Count; }
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _list.Count;
+                }
+            }
         }
 
         /// <summary>
@@ -361,12 +406,12 @@ namespace ZyGames.Framework.Cache.Generic
         /// <param name="comparison"></param>
         public void InsertSort(T item, Comparison<T> comparison)
         {
-            lock (_list)
+            AddChildrenListener(item);
+            lock (_syncRoot)
             {
                 _list.InsertSort(item, comparison);
-                AddChildrenListener(item);
-                Notify(item, CacheItemChangeType.Add, PropertyName);
             }
+            Notify(item, CacheItemChangeType.Add, PropertyName);
         }
 
         /// <summary>
@@ -376,7 +421,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public bool Exists(Predicate<T> match)
         {
-            return _list.Exists(match);
+            lock (_syncRoot)
+            {
+                return _list.Exists(match);
+            }
         }
         /// <summary>
         /// 
@@ -385,7 +433,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public T Find(Predicate<T> match)
         {
-            return _list.Find(match);
+            lock (_syncRoot)
+            {
+                return _list.Find(match);
+            }
         }
 
         /// <summary>
@@ -395,7 +446,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public T FindLast(Predicate<T> match)
         {
-            return _list.FindLast(match);
+            lock (_syncRoot)
+            {
+                return _list.FindLast(match);
+            }
         }
 
         /// <summary>
@@ -407,9 +461,12 @@ namespace ZyGames.Framework.Cache.Generic
         {
             if (match == null)
             {
-                return _list;
+                return ToList();
             }
-            return _list.FindAll(match);
+            lock (_syncRoot)
+            {
+                return _list.FindAll(match);
+            }
         }
 
         /// <summary>
@@ -420,7 +477,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public List<T> GetListRange(int index, int count)
         {
-            return _list.GetRange(index, count);
+            lock (_syncRoot)
+            {
+                return _list.GetRange(index, count);
+            }
         }
 
         /// <summary>
@@ -432,7 +492,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public List<T> GetRange(int pageIndex, int pageSize, out int pageCount)
         {
-            return _list.GetPaging(pageIndex, pageSize, out pageCount);
+            lock (_syncRoot)
+            {
+                return _list.GetPaging(pageIndex, pageSize, out pageCount);
+            }
         }
 
         /// <summary>
@@ -445,7 +508,10 @@ namespace ZyGames.Framework.Cache.Generic
         /// <returns></returns>
         public List<T> GetRange(int pageIndex, int pageSize, out int pageCount, out int recordCount)
         {
-            return _list.GetPaging(pageIndex, pageSize, out pageCount, out recordCount);
+            lock (_syncRoot)
+            {
+                return _list.GetPaging(pageIndex, pageSize, out pageCount, out recordCount);
+            }
         }
         /// <summary>
         /// 

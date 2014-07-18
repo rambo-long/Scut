@@ -31,6 +31,7 @@ using System.Reflection;
 using System.Text;
 using ZyGames.Framework.Cache.Generic;
 using ZyGames.Framework.Common.Configuration;
+using ZyGames.Framework.Game.Contract;
 
 namespace ZyGames.Framework.Game.Runtime
 {
@@ -55,6 +56,7 @@ namespace ZyGames.Framework.Game.Runtime
         private static readonly int actionGZipOutLength;
         private static readonly string actionTypeName;
         private static readonly string scriptTypeName;
+        private static readonly string entityAssemblyName;
 
         static EnvironmentSetting()
         {
@@ -81,13 +83,14 @@ namespace ZyGames.Framework.Game.Runtime
             actionTypeName = ConfigUtils.GetSetting("Game.Action.TypeName");
             if (string.IsNullOrEmpty(actionTypeName))
             {
-                string assemblyName = ConfigUtils.GetSetting("Game.Action.AssemblyName");
+                string assemblyName = ConfigUtils.GetSetting("Game.Action.AssemblyName", "GameServer.CsScript");
                 if (!string.IsNullOrEmpty(assemblyName))
                 {
                     actionTypeName = assemblyName + ".Action.Action{0}," + assemblyName;
                 }
             }
             scriptTypeName = ConfigUtils.GetSetting("Game.Action.Script.TypeName", "Game.Script.Action{0}");
+            entityAssemblyName = ConfigUtils.GetSetting("Game.Entity.AssemblyName");
         }
 
         private static string GetLocalIp()
@@ -117,7 +120,7 @@ namespace ZyGames.Framework.Game.Runtime
             ProductServerId = productServerId;
             CacheGlobalPeriod = cacheGlobalPeriod;
             CacheUserPeriod = cacheUserPeriod;
-            
+
             ScriptSysAsmReferences = scriptSysAsmReferences;
             ScriptAsmReferences = scriptAsmReferences;
             ActionEnableGZip = enableActionGZip;
@@ -126,8 +129,15 @@ namespace ZyGames.Framework.Game.Runtime
             GameIpAddress = gameIpAddress;
             ActionTypeName = actionTypeName;
             ScriptTypeName = scriptTypeName;
+            try
+            {
+                EntityAssembly = Assembly.LoadFrom(entityAssemblyName);
+            }
+            catch{}
+
+            ActionDispatcher = new ScutActionDispatcher();
         }
-        
+
         /// <summary>
         /// Request signature key.
         /// </summary>
@@ -167,7 +177,7 @@ namespace ZyGames.Framework.Game.Runtime
         /// Product server id.
         /// </summary>
         public int ProductServerId { get; set; }
-        
+
         /// <summary>
         /// The entity assembly.
         /// </summary>
@@ -220,6 +230,11 @@ namespace ZyGames.Framework.Game.Runtime
             get;
             private set;
         }
+
+        /// <summary>
+        /// Action repeater
+        /// </summary>
+        public IActionDispatcher ActionDispatcher { get; set; }
 
         ///// <summary>
         ///// Before starting the script engine process.

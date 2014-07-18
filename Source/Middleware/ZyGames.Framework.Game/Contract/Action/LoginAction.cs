@@ -109,7 +109,7 @@ namespace ZyGames.Framework.Game.Contract.Action
         /// </summary>
         /// <param name="actionId">Action identifier.</param>
         /// <param name="httpGet">Http get.</param>
-        protected LoginAction(short actionId, HttpGet httpGet)
+        protected LoginAction(short actionId, ActionGetter httpGet)
             : base(actionId, httpGet)
         {
             LoginProxy = new LoginProxy(httpGet);
@@ -132,19 +132,19 @@ namespace ZyGames.Framework.Game.Contract.Action
         /// <returns></returns>
         public override bool GetUrlElement()
         {
-            if (httpGet.GetEnum("MobileType", ref MobileType) &&
-                httpGet.GetString("Pid", ref PassportId) &&
-                httpGet.GetString("Pwd", ref Password) &&
-                httpGet.GetString("RetailID", ref RetailID))
+            if (actionGetter.GetEnum("MobileType", ref MobileType) &&
+                actionGetter.GetString("Pid", ref PassportId) &&
+                actionGetter.GetString("Pwd", ref Password) &&
+                actionGetter.GetString("RetailID", ref RetailID))
             {
-                httpGet.GetInt("GameType", ref GameType);
-                httpGet.GetInt("ServerID", ref ServerID);
-                httpGet.GetString("DeviceID", ref DeviceID);
-                httpGet.GetByte("Sex", ref Sex);
-                httpGet.GetString("NickName", ref NickName);
-                httpGet.GetString("HeadID", ref HeadID);
-                httpGet.GetWord("ScreenX", ref ScreenX);
-                httpGet.GetWord("ScreenY", ref ScreenY);
+                actionGetter.GetInt("GameType", ref GameType);
+                actionGetter.GetInt("ServerID", ref ServerID);
+                actionGetter.GetString("DeviceID", ref DeviceID);
+                actionGetter.GetByte("Sex", ref Sex);
+                actionGetter.GetString("NickName", ref NickName);
+                actionGetter.GetString("HeadID", ref HeadID);
+                actionGetter.GetWord("ScreenX", ref ScreenX);
+                actionGetter.GetWord("ScreenY", ref ScreenY);
                 return true;
             }
             return false;
@@ -191,7 +191,6 @@ namespace ZyGames.Framework.Game.Contract.Action
                         if (user != null)
                         {
                             Current.User = user;
-                            user.RemoteAddress = httpGet.RemoteAddress;
                         }
                     }
                     return true;

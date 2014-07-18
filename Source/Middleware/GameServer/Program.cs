@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ****************************************************************************/
 using System;
+using System.Reflection;
 using ZyGames.Framework.Common.Log;
 using ZyGames.Framework.Game.Runtime;
 using ZyGames.Framework.Script;
@@ -31,7 +32,7 @@ namespace GameServer
     class Program
     {
         private static string CharFormat =
-@"/////////////////////////////////////////////////////////////////////////
+@"///////////////////////////////////////////////////////////////////////////
 
     //   ) )  //   ) )  //   / / /__  ___/   SCUT Server version {0}
    ((        //        //   / /    / /       Game: {1}   Server: {2}
@@ -42,39 +43,41 @@ namespace GameServer
 ";
         static void Main(string[] args)
         {
-            string date = DateTime.Now.ToString("HH:mm:ss");
             try
             {
+                ConsoleColor currentForeColor = Console.ForegroundColor;
                 var setting = new EnvironmentSetting();
+                try
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkYellow;
+                }
+                catch { }
                 Console.WriteLine(string.Format(CharFormat,
-                    "6.1.6.2",
+                    Assembly.GetExecutingAssembly().GetName().Version,
                     setting.ProductCode,
                     setting.ProductServerId,
                     setting.GamePort));
                 GameEnvironment.Start(setting);
-
-                dynamic instance;
-                if (ScriptEngines.RunMainClass(out instance, args))
+                Console.ForegroundColor = currentForeColor;
+                if (ScriptEngines.RunMainProgram(args))
                 {
-                    Console.WriteLine("{0} Server has started successfully!", date);
+                    Console.WriteLine("{0} Server has started successfully!", DateTime.Now.ToString("HH:mm:ss"));
                     Console.WriteLine("# Server is listening...");
                 }
                 else
                 {
-                    Console.WriteLine("{0} Server failed to start!", date);
+                    Console.WriteLine("{0} Server failed to start!", DateTime.Now.ToString("HH:mm:ss"));
                 }
                 Console.ReadKey();
-                if (instance != null)
-                {
-                    instance.Stop();    
-                }
+                ScriptEngines.StopMainProgram();
             }
             catch (Exception ex)
             {
-                Console.WriteLine("{0} Server failed to start!", date);
+                Console.WriteLine("{0} Server failed to start!", DateTime.Now.ToString("HH:mm:ss"));
                 TraceLog.WriteError("Server failed to start error:{0}", ex);
                 Console.ReadKey();
             }
         }
+
     }
 }

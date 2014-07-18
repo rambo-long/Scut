@@ -67,6 +67,18 @@ namespace ZyGames.Framework.Event
         internal abstract void RemoveChildrenListener(object changeEvent);
 
         /// <summary>
+        /// 移除与父类事件绑定
+        /// </summary>
+        public void RemoveParentEvent()
+        {
+            var obj = ItemEvent.Parent as IItemChangeEvent;
+            if (obj != null)
+            {
+                obj.RemoveChildrenListener(this);
+            }
+        }
+
+        /// <summary>
         /// 解除变更事件通知
         /// </summary>
         /// <param name="sender"></param>
@@ -83,7 +95,14 @@ namespace ZyGames.Framework.Event
         /// Get exclusive modify entity property.
         /// </summary>
         /// <param name="modifyHandle"></param>
+        [Obsolete("Use ModifyLocked method", true)]
         public abstract void ExclusiveModify(Action modifyHandle);
+
+        /// <summary>
+        /// locked modify value.
+        /// </summary>
+        /// <param name="modifyHandle"></param>
+        public abstract void ModifyLocked(Action modifyHandle);
 
         /// <summary>
         /// 序列化Json

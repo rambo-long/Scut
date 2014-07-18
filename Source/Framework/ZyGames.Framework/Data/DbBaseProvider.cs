@@ -88,6 +88,11 @@ namespace ZyGames.Framework.Data
             private set;
         }
 
+        /// <summary>
+        /// Check connect
+        /// </summary>
+        /// <returns></returns>
+        public abstract void CheckConnect();
 
         /// <summary>
         /// 执行Sql语句
@@ -116,12 +121,20 @@ namespace ZyGames.Framework.Data
         /// <summary>
         /// 写入消息队列
         /// </summary>
-        /// <param name="identityID"></param>
+        /// <param name="identityId"></param>
         /// <param name="commandType"></param>
         /// <param name="commandText"></param>
         /// <param name="parameters"></param>
         /// <returns></returns>
-        public abstract int ExecuteNonQuery(int identityID, CommandType commandType, string commandText, params IDataParameter[] parameters);
+        public abstract int ExecuteNonQuery(int identityId, CommandType commandType, string commandText, params IDataParameter[] parameters);
+        
+        /// <summary>
+        /// 生成Sql命令对象
+        /// </summary>
+        /// <param name="identityId"></param>
+        /// <param name="command"></param>
+        /// <returns></returns>
+        public abstract SqlStatement GenerateSql(int identityId, CommandStruct command);
 
         /// <summary>
         /// 检查是否有指定表名

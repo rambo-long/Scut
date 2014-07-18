@@ -27,6 +27,7 @@ using System.Data;
 using System.Text;
 using ZyGames.Framework.Common;
 using MySql.Data.MySqlClient;
+using ZyGames.Framework.Common.Log;
 
 namespace ZyGames.Framework.Data.MySql
 {
@@ -43,6 +44,18 @@ namespace ZyGames.Framework.Data.MySql
             : base(connectionSetting)
         {
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public override void CheckConnect()
+        {
+            using (MySqlConnection conn = new MySqlConnection(ConnectionString))
+            {
+                conn.Open();
+            }
+        }
+
         /// <summary>
         /// 
         /// </summary>
@@ -79,21 +92,39 @@ namespace ZyGames.Framework.Data.MySql
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="identityID"></param>
+        /// <param name="identityId"></param>
         /// <param name="commandType"></param>
         /// <param name="commandText"></param>
         /// <param name="parameters"></param>
         /// <returns></returns>
-        public override int ExecuteNonQuery(int identityID, CommandType commandType, string commandText, params IDataParameter[] parameters)
+        public override int ExecuteNonQuery(int identityId, CommandType commandType, string commandText, params IDataParameter[] parameters)
         {
             SqlStatement statement = new SqlStatement();
-            statement.IdentityID = identityID;
+            statement.IdentityID = identityId;
             statement.ConnectionString = ConnectionString;
             statement.ProviderType = "MySqlDataProvider";
             statement.CommandType = commandType;
             statement.CommandText = commandText;
             statement.Params = SqlStatementManager.ConvertSqlParam(parameters);
             return SqlStatementManager.Put(statement) ? 1 : 0;
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="identityId"></param>
+        /// <param name="command"></param>
+        /// <returns></returns>
+        public override SqlStatement GenerateSql(int identityId, CommandStruct command)
+        {
+            command.Parser();
+            SqlStatement statement = new SqlStatement();
+            statement.IdentityID = identityId;
+            statement.ConnectionString = ConnectionString;
+            statement.ProviderType = "MySqlDataProvider";
+            statement.CommandType = command.CommandType;
+            statement.CommandText = command.Sql;
+            statement.Params = SqlStatementManager.ConvertSqlParam(command.Parameters);
+            return statement;
         }
 
         /// <summary>
@@ -290,7 +321,7 @@ namespace ZyGames.Framework.Data.MySql
             }
             if (type.Equals(typeof(Byte[])))
             {
-                return "blob";
+                return "LongBlob";
             }
 
             if (string.Equals(dbType, "uniqueidentifier", StringComparison.CurrentCultureIgnoreCase) ||
@@ -339,8 +370,8 @@ namespace ZyGames.Framework.Data.MySql
                     command.AppendFormat("PRIMARY KEY ({0})", FormatQueryColumn(",", keys));
                 }
                 command.AppendLine("");
-                string charSet = string.IsNullOrEmpty(ConnectionSetting.CharSet) 
-                    ? " CharSet=gbk" 
+                string charSet = string.IsNullOrEmpty(ConnectionSetting.CharSet)
+                    ? " CharSet=gbk"
                     : " CharSet=" + ConnectionSetting.CharSet;
                 command.AppendFormat(") ENGINE=InnoDB{0};", charSet);
                 if (hasColumn)
@@ -509,11 +540,13 @@ namespace ZyGames.Framework.Data.MySql
         {
             return MySqlParamHelper.MakeInParam(paramName, MySqlDbType.Text, 0, value);
         }
+
         /// <summary>
         /// 创建CommandStruct对象
         /// </summary>
         /// <param name="tableName"></param>
         /// <param name="editType"></param>
+        /// <param name="columns"></param>
         /// <returns></returns>
         public override CommandStruct CreateCommandStruct(string tableName, CommandMode editType, string columns = "")
         {

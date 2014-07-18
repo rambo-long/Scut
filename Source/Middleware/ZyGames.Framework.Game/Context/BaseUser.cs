@@ -94,8 +94,6 @@ namespace ZyGames.Framework.Game.Context
                 return MathUtils.DiffDate(OnlineDate).TotalHours > OnlineHourInterval;
             }
         }
-
-
         /// <summary>
         /// 
         /// </summary>
@@ -108,14 +106,11 @@ namespace ZyGames.Framework.Game.Context
         [JsonIgnore]
         public string Token360 { get; set; }
 
-        //public abstract int GameId { get; set; }
-
-        //public abstract int ServerId { get; set; }
         /// <summary>
         /// 
         /// </summary>
         /// <returns></returns>
-        [Obsolete("no use")]
+        //[Obsolete("no use")]
         public virtual string GetSessionId()
         {
             return string.Empty;

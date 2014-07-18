@@ -36,7 +36,7 @@ namespace ZyGames.Framework.RPC.IO
     /// <summary>
     /// 消息结构体
     /// </summary>
-    public class MessageStructure
+    public class MessageStructure : BaseDisposable
     {
         private const int DoubleSize = 8;
         private const int FloatSize = 4;
@@ -88,8 +88,8 @@ namespace ZyGames.Framework.RPC.IO
             return new MessageStructure(data);
         }
 
-        private int _bufferLength;
-        private byte[] _buffers;
+        //private int _bufferLength;
+        //private byte[] _buffers;
         //private ConcurrentQueue<byte> _buffersQueue;
         private MemoryStream _msBuffers;
         private ConcurrentQueue<object> _waitWriteObjects = new ConcurrentQueue<object>();
@@ -121,6 +121,17 @@ namespace ZyGames.Framework.RPC.IO
             EnableGzip = true;
             _msBuffers = new MemoryStream(buffer.ToArray());
             //_buffersQueue = new ConcurrentQueue<byte>(buffer);
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="disposing"></param>
+        protected override void Dispose(bool disposing)
+        {
+            _waitWriteObjects = null;
+            Reset();
+            _msBuffers.Dispose();
+            base.Dispose(disposing);
         }
 
         /// <summary>
@@ -289,20 +300,20 @@ namespace ZyGames.Framework.RPC.IO
         /// <exception cref="ArgumentOutOfRangeException"></exception>
         public byte[] ReadByte(int count)
         {
+            VerifyBufferLength(count);
             byte[] bytes = new byte[count];
             int len = _msBuffers.Read(bytes, 0, count);
             _currRecordPos += len;
-            //for (int i = 0; i < count; i++)
-            //{
-            //    byte b;
-            //    if (_buffersQueue.TryDequeue(out b))
-            //    {
-            //        bytes[i] = b;
-            //        Interlocked.Increment(ref _offset);
-            //        Interlocked.Increment(ref _currRecordPos);
-            //    }
-            //}
             return bytes;
+        }
+
+        private void VerifyBufferLength(int count)
+        {
+            long len = Length - Offset;
+            if (count < 0 || count > len)
+            {
+                throw new ArgumentOutOfRangeException(string.Format("Read {0} byte len overflow max {1} len.", count, len));
+            }
         }
 
         /// <summary>
@@ -310,8 +321,10 @@ namespace ZyGames.Framework.RPC.IO
         /// </summary>
         /// <param name="count"></param>
         /// <returns></returns>
+        /// <exception cref="ArgumentOutOfRangeException"></exception>
         public byte[] PeekByte(int count)
         {
+            VerifyBufferLength(count);
             byte[] bytes = new byte[count];
             int len = _msBuffers.Read(bytes, 0, count);
             _msBuffers.Position = _msBuffers.Position - len;
